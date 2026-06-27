@@ -18,7 +18,7 @@ EPOCHS     = 3
 DEVICE     = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-# ─── SceneLayer ───────────────────────────────────────────────────────────────
+# ─── STARLayer ───────────────────────────────────────────────────────────────
 class STARLayer(nn.Module):
     def __init__(self, d_model: int):
         super().__init__()
@@ -215,7 +215,7 @@ def train():
     test_dl  = DataLoader(test_ds,  batch_size=BATCH_SIZE, shuffle=False, num_workers=2, pin_memory=True)
 
     # Model
-    model = SceneLM(VOCAB_SIZE).to(DEVICE)
+    model = STARLM(VOCAB_SIZE).to(DEVICE)
     print(f"Params: {count_params(model)}")
 
     optimizer = torch.optim.AdamW(
@@ -283,12 +283,12 @@ def train():
 
         if avg_val < best_val_loss:
             best_val_loss = avg_val
-            torch.save(model.state_dict(), "scene_lm_best.pt")
-            print("  ✓ best model saved → scene_lm_best.pt\n")
+            torch.save(model.state_dict(), "STARLM_lm_best.pt")
+            print("  ✓ best model saved → STARLM_lm_best.pt\n")
 
     # ── Test ───────────────────────────────────────────────────────────────
     print("Loading the best model for test")
-    model.load_state_dict(torch.load("scene_lm_best.pt", map_location=DEVICE))
+    model.load_state_dict(torch.load("STARLM_lm_best.pt", map_location=DEVICE))
     model.eval()
 
     test_loss = 0.0
