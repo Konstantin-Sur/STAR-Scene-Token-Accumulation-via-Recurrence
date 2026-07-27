@@ -134,6 +134,39 @@ class STARLayer(nn.Module):
 ```
 
 ---
+## TEST LAYER VARIATION(GPU FRIENDLY)
+
+```python
+class ContextAwareParallelSTAR(nn.Module):
+    def __init__(self, d_model):
+        super().__init__()
+        self.coarse_tok = nn.Linear(d_model, d_model, bias=False)
+        self.fine_tok = nn.Linear(d_model, d_model, bias=False)
+        self.scene_proj = nn.Sequential(
+            nn.Linear(d_model, d_model, bias=False),
+            nn.SiLU(),
+            nn.Linear(d_model, d_model, bias=False),
+        )
+        self.scene_norm = nn.RMSNorm(d_model)
+        self.W_out = nn.Linear(d_model, d_model, bias=False)
+
+    def forward(self, x):
+        B, T, D = x.shape
+
+        coarse_deltas = self.coarse_tok(x)
+        coarse_scene = torch.cumsum(coarse_deltas, dim=1)
+
+        zero_state = torch.zeros(B, 1, D, device=x.device, dtype=x.dtype)
+        past_scene = torch.cat([zero_state, coarse_scene[:, :-1, :]], dim=1)
+
+        scene_factor = 1.0 + self.scene_proj(past_scene)
+        context_deltas = torch.tanh(self.fine_tok(x) * scene_factor)
+
+        fine_scene = torch.cumsum(context_deltas, dim=1)
+        fine_scene = self.scene_norm(fine_scene)
+
+        return x + self.W_out(fine_scene)
+```
 
 ## Status
 
