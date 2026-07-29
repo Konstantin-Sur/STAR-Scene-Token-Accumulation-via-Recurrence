@@ -137,35 +137,43 @@ class STARLayer(nn.Module):
 ## TEST LAYER VARIATION(GPU FRIENDLY)
 
 ```python
-class ContextAwareParallelSTAR(nn.Module):
-    def __init__(self, d_model):
+class STARLayerParallel(nn.Module):
+    def __init__(self, d_model, eps: float = 1e-6):
         super().__init__()
-        self.coarse_tok = nn.Linear(d_model, d_model, bias=False)
-        self.fine_tok = nn.Linear(d_model, d_model, bias=False)
-        self.scene_proj = nn.Sequential(
-            nn.Linear(d_model, d_model, bias=False),
-            nn.SiLU(),
+        self.tok_proj = nn.Sequential(
+            nn.Linear(d_model, d_model, bias=False), nn.SiLU(),
             nn.Linear(d_model, d_model, bias=False),
         )
-        self.scene_norm = nn.RMSNorm(d_model)
+        self.scene_proj = nn.Sequential(
+            nn.Linear(d_model, d_model, bias=False), nn.SiLU(),
+            nn.Linear(d_model, d_model, bias=False),
+        )
         self.W_out = nn.Linear(d_model, d_model, bias=False)
+        self.scene_norm = nn.LayerNorm(d_model)
+        self.gate_proj = nn.Linear(d_model, d_model, bias=False)
+        self.eps = eps
 
     def forward(self, x):
         B, T, D = x.shape
 
-        coarse_deltas = self.coarse_tok(x)
-        coarse_scene = torch.cumsum(coarse_deltas, dim=1)
+        raw = self.tok_proj(x)
+        gate = torch.sigmoid(self.gate_proj(x))
+        weighted = raw * gate
 
-        zero_state = torch.zeros(B, 1, D, device=x.device, dtype=x.dtype)
-        past_scene = torch.cat([zero_state, coarse_scene[:, :-1, :]], dim=1)
+        cum_weighted = torch.cumsum(weighted, dim=1)
+        cum_gate = torch.cumsum(gate, dim=1)
 
-        scene_factor = 1.0 + self.scene_proj(past_scene)
-        context_deltas = torch.tanh(self.fine_tok(x) * scene_factor)
+        cum_weighted_excl = torch.zeros_like(cum_weighted)
+        cum_gate_excl = torch.zeros_like(cum_gate)
+        cum_weighted_excl[:, 1:, :] = cum_weighted[:, :-1, :]
+        cum_gate_excl[:, 1:, :] = cum_gate[:, :-1, :]
 
-        fine_scene = torch.cumsum(context_deltas, dim=1)
-        fine_scene = self.scene_norm(fine_scene)
+        scene_raw = cum_weighted_excl / (cum_gate_excl + self.eps)
+        scene_before = self.scene_norm(scene_raw)
 
-        return x + self.W_out(fine_scene)
+        delta = torch.tanh(raw * (1.0 + self.scene_proj(scene_before)))
+        out = x + self.W_out(scene_before + delta)
+        return out
 ```
 
 ## Status
