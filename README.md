@@ -73,6 +73,13 @@ The gate is what makes the parallel formulation possible without losing the spir
 
 ---
 
+## LIMITS! (VERY IMPORTANT)
+
+This layer works pretty well, and better then MHA in context summary, model doesn't drift in the theme, but it has problem - repetition because of bad position understanding, so this layer has to be used like a mix with other layers. In general that layer shows very strong capabilities in very cheap context understanding, so it can be used with more computational-complex layers, and decrease flops usage by replacing some layers with STAR.
+
+---
+
+
 ## Complexity
 
 | Mechanism | Sequence complexity | Parallel across time steps? |
